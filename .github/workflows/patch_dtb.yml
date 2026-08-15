@@ -1,0 +1,50 @@
+name: Patch K36S DTB with Dual Analogs
+
+on:
+  push:
+    paths:
+      - '*.dtb'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  patch-dtb:
+    name: Decompile, Merge, and Recompile DTB
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Device Tree Compiler
+        run: sudo apt-get update && sudo apt-get install -y device-tree-compiler
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run Patch Script
+        run: python patch_dtb.py
+
+      - name: Upload Patched DTB as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rk3326-k36s-linux-patched-dtb
+          path: rk3326-k36s-linux-patched.dtb
+          retention-days: 14
+
+      - name: Commit and Push to Repository
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add rk3326-k36s-linux-patched.dtb
+          git commit -m "Auto-patched K36S DTB with R36T Max analog sticks" || echo "No changes to commit"
+          git push
