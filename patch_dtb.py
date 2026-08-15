@@ -41,7 +41,7 @@ def extract_block_at(text, start_idx):
 
 def find_node_by_names_or_properties(dts_text, target_names):
     """Sucht flexibel nach Knoten anhand von Namen oder typischen Joystick/Gamepad-Eigenschaften."""
-    # 1. Suche nach namentlich bekannten Knoten
+    # 1. Suche nach namentlich bekannten Knoten (inkl. odroidgo3-joypad etc.)
     for name in target_names:
         pattern = re.compile(r'([a-zA-Z0-9_-]+:\s*)?' + name + r'(@[0-9a-fA-F]+)?\s*\{')
         match = pattern.search(dts_text)
@@ -50,16 +50,29 @@ def find_node_by_names_or_properties(dts_text, target_names):
             if node_text:
                 return node_text, start, end, name
 
-    # 2. Erweiterte Suche über typische Joystick-Eigenschaften im DTS
+    # 2. Suche nach kompatiblen Strings im DTS (z.B. compatible = "odroidgo3-joypad")
+    for name in target_names:
+        compat_pattern = re.compile(r'compatible\s*=\s*("[^"]*' + name + '[^"]*")')
+        compat_match = compat_pattern.search(dts_text)
+        if compat_match:
+            # Finde den Beginn des übergeordneten Knotens
+            idx = compat_match.start()
+            start = dts_text.rfind('{', 0, idx)
+            if start != -1:
+                node_start = dts_text.rfind('\n', 0, start) + 1
+                node_text, s, e = extract_block_at(dts_text, node_start)
+                if node_text:
+                    return node_text, node_start, e, f"compatible-{name}"
+
+    # 3. Erweiterte Suche über typische Joystick-Eigenschaften im DTS
     if 'abs-range' in dts_text or 'ABS_RX' in dts_text or 'linux,code' in dts_text:
-        # Suche nach Vorkommen von abs-range und beame zum Start des übergeordneten Knotens
         for match_iter in re.finditer(r'abs-range', dts_text):
             idx = match_iter.start()
             start = dts_text.rfind('{', 0, idx)
             if start != -1:
                 node_start = dts_text.rfind('\n', 0, start) + 1
                 node_text, s, e = extract_block_at(dts_text, node_start)
-                if node_text and ('axis' in node_text.lower() or 'joystick' in node_text.lower() or 'io-channels' in node_text.lower()):
+                if node_text and ('axis' in node_text.lower() or 'joystick' in node_text.lower() or 'io-channels' in node_text.lower() or 'odroid' in node_text.lower()):
                     return node_text, node_start, e, "property-matched-joystick"
 
     return None, -1, -1, None
@@ -85,6 +98,10 @@ def main():
 
     print("Suche nach Joystick/Analogstick-Knoten im R36T Max DTS...")
     target_nodes = [
+        'odroidgo3-joypad',
+        'odroidgo3_joypad',
+        'odroidgo2-joypad',
+        'odroidgo2_joypad',
         'adc-joystick', 
         'joystick', 
         'gamepad', 
@@ -98,9 +115,9 @@ def main():
     node_text, _, _, found_name = find_node_by_names_or_properties(r36t_text, target_nodes)
     
     if not node_text:
-        print("Diagnose - Zeige alle Zeilen mit 'adc', 'axis' oder 'joystick' in r36t.dts:")
+        print("Diagnose - Zeige alle Zeilen mit 'odroid', 'adc', 'axis' oder 'joystick' in r36t.dts:")
         for line in r36t_text.splitlines():
-            if any(k in line.lower() for k in ['adc', 'joystick', 'axis', 'saradc', 'gamepad']):
+            if any(k in line.lower() for k in ['odroid', 'adc', 'joystick', 'axis', 'saradc', 'gamepad']):
                 print("  ->", line.strip())
         print("Fehler: Konnte keinen passenden Analogstick-Knoten in der R36T Max DTS extrahieren.")
         sys.exit(1)
